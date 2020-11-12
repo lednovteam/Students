@@ -1,3 +1,3 @@
 # Students
-# OLESYA
-# HELLO!!!
+# Guide GIT
+# kzkkzk
