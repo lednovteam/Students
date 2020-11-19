@@ -7,6 +7,7 @@ import requests
 import time
 import logging
 import logging.config
+import bson
 from queue import Queue
 from threading import Thread
 from bson.json_util import dumps, loads
@@ -96,12 +97,12 @@ def main():
             #запуск второго потока
 			observer.start()
             #определение способа обновления базы с помощью цикла
-            if myConfig["force"]:
+			if myConfig["force"]:
                 #запуск жесткого обновления базы
-                force_update_baza(collection, solr_url, solr_collection)
-            else:
+				force_update_baza(collection, solr_url, solr_collection)
+			else:
                 #запуск стандартного обновления базы
-                update_baza(collection, solr_url, solr_collection)
+				update_baza(collection, solr_url, solr_collection)
             #ожидание завершения потока
 			observer.join()
         #обработка исключений
@@ -172,8 +173,6 @@ def force_update_baza(collection, solr_url, solr_collection):
 	responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*+%26%26+" + myConfig["fieldCommonIDMongoInSolr"] + ":*&fl=" + myConfig["fieldCommonIDMongoInSolr"] + "+" + myConfig["fieldLastModificationDateFromSolr"] + "&rows=" + str(response["response"]["numFound"]))
     #получение ID и даты каждой записи в Mongo
 	responseForMongo = collection.find({}, {myConfig["fieldIDMongo"]:1, myConfig["fieldLastModificationDateFromMongo"]:1})
-	print(responseForDelete)
-	print(responseForMongo)
     #создание словаря для ID и даты в Solr
 	dictSolr = {i.get(myConfig["fieldCommonIDMongoInSolr"])[0]:i.get(myConfig["fieldLastModificationDateFromSolr"])[0] for i in responseForDelete["response"]["docs"]}
     #создание словаря для ID и даты в Mongo
@@ -196,15 +195,19 @@ def force_update_baza(collection, solr_url, solr_collection):
 			deleteSetForSolr.add(elem)
             #добавление элемента во множество на добавление
 			addSetForSolr.add(elem)
+	print(addSetForSolr)
+	print(deleteSetForSolr)
 	#удаление элементов
 	for elem in deleteSetForSolr:
         #удаление элемента по ID из Solr
 		render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+elem}})})
 	#получение элементов на добавление
-	addElements = collection.find({myConfig["fieldIDMongo"]:{"$in":list(addSetForSolr)}})
-	for elem in addElements:
-        #добавление элементов по ID в Solr
-		render_request({"URL": URL,"headers": headers, "data": dumps(elem)})
+	addElements = list(collection.find({myConfig["fieldIDMongo"]:{"$in":[ bson.objectid.ObjectId(i) for i in addSetForSolr]}}))
+	print(addElements)
+	for elem2 in addElements:
+		print(elem2)
+		#добавление элементов по ID в Solr
+		render_request({"URL": URL, "headers": headers, "data": dumps(elem2)})
 
 #получение документа по запросу 
 def get_documents_by_query(solr_url, solr_collection, query):
@@ -288,13 +291,15 @@ def render_request(data):
 		try:
             #отправка данных на Solr
 			r = requests.post(data["URL"], data = data["data"], headers = data["headers"])
+			logger = logging.getLogger("App.render_request")
             #определение, был ли завершён запрос или нет
 			if (r.status_code != 200):
                 #снова отправить запрос через 5 секунд
+				logger.info("не удалось отправить запрос :( " + r.url + " content: " + r.content.decode("utf-8"))
 				time.sleep(5)
 				continue
             #логирование отправки данных
-			logger = logging.getLogger("App.render_request")
+			#logger = logging.getLogger("App.render_request")
 			logger.info("send request " + r.url + ", content: " + r.content.decode("utf-8"))
 			return r
 		except ConnectionError:
