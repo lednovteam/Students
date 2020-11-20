@@ -48,15 +48,15 @@ myConfig = {
     "logConfig": dictLogConfig,
     "mongoClientIP": "localhost:27002",
     "mongoClientReplicaSet": "My_Replica_Set",
-    "solrURL": "http://192.168.0.80:8983/solr",
-    "solrCollection": 'sbornik2',
-    "mongoClientDB": "books2",
+    "solrURL": "http://192.168.0.82:8983/solr",
+    "solrCollection": 'sborniki',
+    "mongoClientDB": "sborniki",
     "mongoClientCollection": "users",
-    "fieldLastModificationDateFromSolr": "date._date",
+    "fieldLastModificationDateFromSolr": "creationDate._date",
     "fieldCommonIDMongoInSolr": "_id._oid",
-    "fieldLastModificationDateFromMongo":"date",
+    "fieldLastModificationDateFromMongo":"creationDate",
     "fieldIDMongo":"_id",
-    "force": True,
+    "force": False,
     }
 #инициализация логов
 logging.config.dictConfig(myConfig["logConfig"])
@@ -120,46 +120,52 @@ def update_baza(collection, solr_url, solr_collection):
 	headers = {'Content-type': "application/json"}
     #строка запроса Solr
 	URL = solr_url + '/' + solr_collection + '/update/json/docs?commit=true'
-    #отправка запроса к Solr на получение последнего обновленного документа
-	response = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*&rows=1&sort=" + myConfig["fieldLastModificationDateFromSolr"] + "+desc")
-    #получение IDMongo всех документов 
-	responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldCommonIDMongoInSolr"] + ":*&fl=" + myConfig["fieldCommonIDMongoInSolr"] + "&rows=" + str(response["response"]["numFound"]))
-    #получение всех IDMongo
-	mongoForDelete = list(collection.find({}, {myConfig["fieldIDMongo"]:1}))
-    #формирование множества из IDSolr
-	solrSetDelete = set([ i.get(myConfig["fieldCommonIDMongoInSolr"])[0] for i in responseForDelete['response']['docs']])
-    #формирование множества из IDMongo
-	mongoSetDelete = set([ str(i.get(myConfig["fieldIDMongo"])) for i in mongoForDelete])
-    #цикл по всем элементам, которые находятся в Solr, но не находятся в Mongo
-	for resDel in solrSetDelete.difference(mongoSetDelete):
-        #удаление элементов из Solr
-		render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+ resDel}})})
-    #булева переменная для определения обновления данных (данных нет)
-	isDelete = False
-    #условие для определения ошибки в ответе сервера
-	if "error" in response:
-        #если данных в ядре Solr нет, то данные добавляются
-		if response["error"]["code"] == 400:
-			print("kek")
-            #получение всех записей
-			a = collection.find()
+	firstResponse = get_documents_by_query(solr_url, solr_collection, "q=*:*")
+	if (firstResponse["response"]["numFound"] > 0): 
+    	#отправка запроса к Solr на получение последнего обновленного документа
+		response = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*&rows=1&sort=" + myConfig["fieldLastModificationDateFromSolr"] + "+desc")
+    	#получение IDMongo всех документов 
+		responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldCommonIDMongoInSolr"] + ":*&fl=" + myConfig["fieldCommonIDMongoInSolr"] + "&rows=" + str(response["response"]["numFound"]))
+    	#получение всех IDMongo
+		mongoForDelete = list(collection.find({}, {myConfig["fieldIDMongo"]:1}))
+    	#формирование множества из IDSolr
+		solrSetDelete = set([ i.get(myConfig["fieldCommonIDMongoInSolr"])[0] for i in responseForDelete['response']['docs']])
+    	#формирование множества из IDMongo
+		mongoSetDelete = set([ str(i.get(myConfig["fieldIDMongo"])) for i in mongoForDelete])
+    	#цикл по всем элементам, которые находятся в Solr, но не находятся в Mongo
+		for resDel in solrSetDelete.difference(mongoSetDelete):
+        	#удаление элементов из Solr
+			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+ resDel}})})
+    	#булева переменная для определения обновления данных (данных нет)
+		isDelete = False
+    	#условие для определения ошибки в ответе сервера
+		if "error" in response:
+        	#если данных в ядре Solr нет, то данные добавляются
+			if response["error"]["code"] == 400:
+				print("kek")
+            	#получение всех записей
+				a = collection.find()
+		else:
+        	#булева переменная для определения обновления данных (данные есть)
+			isDelete = True
+        	#получение даты последней обновленной записи (в Solr)
+			date = response["response"]["docs"][0][myConfig["fieldLastModificationDateFromSolr"]][0]
+        	#поиск записи в Mongo c датой обновления более поздней, чем дата обновления последней записи в Solr
+			a= collection.find({myConfig["fieldLastModificationDateFromMongo"]: {"$gt": datetime.fromtimestamp(date / 1e3)-timedelta(hours = 5)} })
+			print(datetime.fromtimestamp(date / 1e3))
+    	#цикл на добавление записей
+		for coll in a:
+			print(coll)
+        	#если данные уже были в таблице, то записи удаляются (исключаем ошибку при отстутсвии данных)
+			if isDelete:
+            	#удаление возможной записи с IDMongo
+				render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"" + myConfig["fieldCommonIDMongoInSolr"] + ":"+str(coll[myConfig["fieldIDMongo"]])}})})
+        	#добавление элемента
+			render_request({"URL": URL,"headers": headers, "data": dumps(coll)})
 	else:
-        #булева переменная для определения обновления данных (данные есть)
-		isDelete = True
-        #получение даты последней обновленной записи (в Solr)
-		date = response["response"]["docs"][0][myConfig["fieldLastModificationDateFromSolr"]][0]
-        #поиск записи в Mongo c датой обновления более поздней, чем дата обновления последней записи в Solr
-		a= collection.find({myConfig["fieldLastModificationDateFromMongo"]: {"$gt": datetime.fromtimestamp(date / 1e3)-timedelta(hours = 5)} })
-		print(datetime.fromtimestamp(date / 1e3))
-    #цикл на добавление записей
-	for coll in a:
-		print(coll)
-        #если данные уже были в таблице, то записи удаляются (исключаем ошибку при отстутсвии данных)
-		if isDelete:
-            #удаление возможной записи с IDMongo
-			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"" + myConfig["fieldCommonIDMongoInSolr"] + ":"+str(coll[myConfig["fieldIDMongo"]])}})})
-        #добавление элемента
-		render_request({"URL": URL,"headers": headers, "data": dumps(coll)})
+		val = collection.find()
+		for v in val:
+			render_request({"URL": URL,"headers": headers, "data": dumps(v)})
 
 #функция жесткого обновления базы
 def force_update_baza(collection, solr_url, solr_collection):
