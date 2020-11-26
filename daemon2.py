@@ -11,6 +11,7 @@ from queue import Queue
 from threading import Thread
 from bson.json_util import dumps, loads
 
+#определение очереди для изменения значений в Solr
 __queue__ = Queue()
 dictLogConfig = {
         "version":1,
@@ -36,42 +37,74 @@ dictLogConfig = {
                 "format":"%(asctime)s - %(name)s - %(levelname)s - %(message)s"
             }
         },
-	"root":{
+    "root":{
 		"level": "DEBUG",
 		"handlers": ["rootHandler"]
 	}
     }
 
-logging.config.dictConfig(dictLogConfig)
+myConfig = {
+    "logConfig": dictLogConfig,
+    "mongoClientIP": "localhost:27002",
+    "mongoClientReplicaSet": "My_Replica_Set",
+    "solrURL": "http://192.168.0.80:8983/solr",
+    "solrCollection": 'sbornik2',
+    "mongoClientDB": "books2",
+    "mongoClientCollection": "users",
+    "fieldLastModificationDateFromSolr": "date._date",
+    "fieldCommonIDMongoInSolr": "_id._oid",
+    "fieldLastModificationDateFromMongo":"date",
+    "fieldIDMongo":"_id",
+    "force": True,
+    }
+#инициализация логов
+logging.config.dictConfig(myConfig["logConfig"])
+#определение корневого элемента
 logger = logging.getLogger("App")
-#logging.basicConfig(filename="daemon.log", level = logging.INFO)
+#логирование запуска скрипта
 logger.info("start program")
+#определение файлов, которые не должны закрываться после запуска демона
 files = [logger.handlers[0].stream.fileno(), logging.root.handlers[0].stream.fileno()]
-
+#булева переменная для остановки потока
 thread_break = False
 
+#основной поток демона
 def main():
+    #тайм-аут для переподключение к Mongo
 	connect_to_mongo = 2
+    #определение потока отправки данных на Solr
 	rec = Thread(target = queue_into_request)
+    #запуск потока
 	rec.start()
+    #основной цикл программы для подключения
 	while (True):
 		try:
+            #булева переменная для остановки потока
 			thread_break = False
-			client = MongoClient("localhost:27002", replicaset = "My_Replica_Set")
-			solr_url = "http://192.168.0.80:8983/solr"
-			solr_collection = 'sbornik2'
-			db = client.books2
-			collection = db.users
-			#print(get_last_document_by_date(solr_url, solr_collection, "q=date._date:*&rows=1&sort=date._date+desc"))
-			#запрос на получение всех элементов с mongodb и даты поcледнего изменения в solr
+            #определение подключения к Mongo
+			client = MongoClient(myConfig["mongoClientIP"], replicaset = myConfig["mongoClientReplicaSet"])
+            #определение URL Solr
+			solr_url = myConfig["solrURL"]
+            #определение коллекции Solr
+			solr_collection = myConfig["solrCollection"]
+            #определение базы в Mongo
+			db = client[myConfig["mongoClientDB"]]
+            #определение коллекции в Mongo
+			collection = db[myConfig["mongoClientCollection"]]
+			#запрос на получение всех элементов с mongodb и даты поcледнего изменения в solr (определение второго потока)
 			observer = Thread(target = observer_collection, args = (collection, solr_url, solr_collection))
+            #запуск второго потока
 			observer.start()
-			force_update_baza(collection, solr_url, solr_collection)
-			#функция добавления недобавленных элементов
-			#queue_into_request()
-			#rec = Thread(target = queue_into_request)
-			#rec.start()
+            #определение способа обновления базы с помощью цикла
+            if myConfig["force"]:
+                #запуск жесткого обновления базы
+                force_update_baza(collection, solr_url, solr_collection)
+            else:
+                #запуск стандартного обновления базы
+                update_baza(collection, solr_url, solr_collection)
+            #ожидание завершения потока
 			observer.join()
+        #обработка исключений
 		except Exception as e:
 			print(e)
 			thread_break = True
@@ -80,130 +113,195 @@ def main():
 			logger = logging.getLogger("App.main")
 			logger.error(e)
 
+#функция стандартного обновления базы
 def update_baza(collection, solr_url, solr_collection):
+    #определение заголовка запроса Solr
 	headers = {'Content-type': "application/json"}
+    #строка запроса Solr
 	URL = solr_url + '/' + solr_collection + '/update/json/docs?commit=true'
-	response = get_documents_by_query(solr_url, solr_collection, "q=date._date:*&rows=1&sort=date._date+desc")
-	responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=_id._oid:*&fl=_id._oid&rows=" + str(response["response"]["numFound"]))
-	mongoForDelete = list(collection.find({}, {"_id:":1}))
-	print(responseForDelete)
-	solrSetDelete = set([ i.get('_id._oid')[0] for i in responseForDelete['response']['docs']])
-	print(mongoForDelete)
-	mongoSetDelete = set([ str(i.get('_id')) for i in mongoForDelete])
-	#print(mongoForDelete)
-	print(solrSetDelete.difference(mongoSetDelete))
+    #отправка запроса к Solr на получение последнего обновленного документа
+	response = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*&rows=1&sort=" + myConfig["fieldLastModificationDateFromSolr"] + "+desc")
+    #получение IDMongo всех документов 
+	responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldCommonIDMongoInSolr"] + ":*&fl=" + myConfig["fieldCommonIDMongoInSolr"] + "&rows=" + str(response["response"]["numFound"]))
+    #получение всех IDMongo
+	mongoForDelete = list(collection.find({}, {myConfig["fieldIDMongo"]:1}))
+    #формирование множества из IDSolr
+	solrSetDelete = set([ i.get(myConfig["fieldCommonIDMongoInSolr"])[0] for i in responseForDelete['response']['docs']])
+    #формирование множества из IDMongo
+	mongoSetDelete = set([ str(i.get(myConfig["fieldIDMongo"])) for i in mongoForDelete])
+    #цикл по всем элементам, которые находятся в Solr, но не находятся в Mongo
 	for resDel in solrSetDelete.difference(mongoSetDelete):
-		render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"_id._oid:"+ resDel}})})	 
+        #удаление элементов из Solr
+		render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+ resDel}})})
+    #булева переменная для определения обновления данных (данных нет)
 	isDelete = False
+    #условие для определения ошибки в ответе сервера
 	if "error" in response:
+        #если данных в ядре Solr нет, то данные добавляются
 		if response["error"]["code"] == 400:
 			print("kek")
+            #получение всех записей
 			a = collection.find()
 	else:
+        #булева переменная для определения обновления данных (данные есть)
 		isDelete = True
-		date = response["response"]["docs"][0]["date._date"][0]
-		a= collection.find({"date": {"$gt": datetime.fromtimestamp(date / 1e3)-timedelta(hours = 5)} })
+        #получение даты последней обновленной записи (в Solr)
+		date = response["response"]["docs"][0][myConfig["fieldLastModificationDateFromSolr"]][0]
+        #поиск записи в Mongo c датой обновления более поздней, чем дата обновления последней записи в Solr
+		a= collection.find({myConfig["fieldLastModificationDateFromMongo"]: {"$gt": datetime.fromtimestamp(date / 1e3)-timedelta(hours = 5)} })
 		print(datetime.fromtimestamp(date / 1e3))
+    #цикл на добавление записей
 	for coll in a:
 		print(coll)
+        #если данные уже были в таблице, то записи удаляются (исключаем ошибку при отстутсвии данных)
 		if isDelete:
-			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"_id._oid:"+str(coll["_id"])}})})
+            #удаление возможной записи с IDMongo
+			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"" + myConfig["fieldCommonIDMongoInSolr"] + ":"+str(coll[myConfig["fieldIDMongo"]])}})})
+        #добавление элемента
 		render_request({"URL": URL,"headers": headers, "data": dumps(coll)})
 
+#функция жесткого обновления базы
 def force_update_baza(collection, solr_url, solr_collection):
+    #определение заголовка запроса Solr
 	headers = {'Content-type': "application/json"}
+    #строка запроса Solr
 	URL = solr_url + '/' + solr_collection + '/update/json/docs?commit=true'
+    #отправка запроса к Solr на получение количества всех документов
 	response = get_documents_by_query(solr_url, solr_collection, "q=*:*&rows=0")
-	responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=date._date:*+%26%26+_id._oid:*&fl=_id._oid+date._date&rows=" + str(response["response"]["numFound"]))
-	responseForMongo = collection.find({}, {"_id":1, "date":1})
+    #получение ID и даты каждой записи в Solr
+	responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*+%26%26+" + myConfig["fieldCommonIDMongoInSolr"] + ":*&fl=" + myConfig["fieldCommonIDMongoInSolr"] + "+" + myConfig["fieldLastModificationDateFromSolr"] + "&rows=" + str(response["response"]["numFound"]))
+    #получение ID и даты каждой записи в Mongo
+	responseForMongo = collection.find({}, {myConfig["fieldIDMongo"]:1, myConfig["fieldLastModificationDateFromMongo"]:1})
 	print(responseForDelete)
 	print(responseForMongo)
-	dictSolr = {i.get("_id._oid")[0]:i.get("date._date")[0] for i in responseForDelete["response"]["docs"]}
-	dictMongo = {str(i.get("_id")):i.get("date") for i in list(responseForMongo)}
+    #создание словаря для ID и даты в Solr
+	dictSolr = {i.get(myConfig["fieldCommonIDMongoInSolr"])[0]:i.get(myConfig["fieldLastModificationDateFromSolr"])[0] for i in responseForDelete["response"]["docs"]}
+    #создание словаря для ID и даты в Mongo
+	dictMongo = {str(i.get(myConfig["fieldIDMongo"])):i.get(myConfig["fieldLastModificationDateFromMongo"]) for i in list(responseForMongo)}
+    #создание множества из ID Solr
 	solrSetIDs = set(dictSolr.keys())
+    #создание множества из ID Mongo
 	mongoSetIDs = set(dictMongo.keys())
+    #определения множества на удаление в Solr (есть в Solr, но нет в Mongo)
 	deleteSetForSolr = solrSetIDs.difference(mongoSetIDs)
+    #определения множества на добавление в Solr (есть в Mongo, но нет в Solr)
 	addSetForSolr = mongoSetIDs.difference(solrSetIDs)
+    #объединение множеств (данные, которые есть и там, и там)
 	intersectionSetForSolr = mongoSetIDs.intersection(solrSetIDs)
 	#сравнение элементов
 	for elem in intersectionSetForSolr:
+        #если дата не совпадает, то мы "обновляем" (т.е. удаляем и добавляем заново) запись
 		if (datetime.fromtimestamp(dictSolr[elem] / 1e3)-timedelta(hours = 5) != dictMongo[elem]):
+            #добавление элемента во множество на удаление
 			deleteSetForSolr.add(elem)
+            #добавление элемента во множество на добавление
 			addSetForSolr.add(elem)
 	#удаление элементов
 	for elem in deleteSetForSolr:
-		render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"_id._oid:"+elem}})})
-	#добавление элементов
-	addElements = collection.find({"_id":{"$in":list(addSetForSolr)}})
+        #удаление элемента по ID из Solr
+		render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+elem}})})
+	#получение элементов на добавление
+	addElements = collection.find({myConfig["fieldIDMongo"]:{"$in":list(addSetForSolr)}})
 	for elem in addElements:
+        #добавление элементов по ID в Solr
 		render_request({"URL": URL,"headers": headers, "data": dumps(elem)})
 
+#получение документа по запросу 
 def get_documents_by_query(solr_url, solr_collection, query):
 	return loads(requests.get(solr_url + '/' + solr_collection + '/select?' + query ).content)
 
-
+#определение функции первого потока 
 def queue_into_request():
+    #бесконечный цикл работы потока
 	while True:
+        #получение первой записи из очереди
 		data = __queue__.get()
+        #отправка запроса
 		render_request(data)
 
+#функция добавления записи в Solr
 def add_to_solr(solr_url, solr_collection, data):
+    #часть URL
 	path = '/update/json/docs?commit=true'
+    #заголовок запроса
 	headers = {'Content-type': "application/json"}
+    #добавление записи в очередь
 	__queue__.put({"URL": solr_url + '/' + solr_collection + path, "headers":headers, "data":dumps(data)})
 
+#функция удаления записи из Solr
 def delete_to_solr(solr_url, solr_collection, data):
+    #часть URL
 	path = '/update?commit=true'
+    #заголовок запроса
 	headers = {'Content-type': "application/json"}
-	__queue__.put({"URL": solr_url + '/' + solr_collection + path, "headers":headers, "data":dumps({"delete":{"query":"_id._oid:"+str(data)}})})
+    #добавление записи в очередь на удаление
+	__queue__.put({"URL": solr_url + '/' + solr_collection + path, "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+str(data)}})})
 
+#функция получения документов из Mongo по ID
 def get_document_by_id(id, collection):
-	print(loads(dumps(collection.find({"_id": id})[0])))
-	return collection.find({"_id": id})[0]
+	print(loads(dumps(collection.find({myConfig["fieldIDMongo"]: id})[0])))
+	return collection.find({myConfig["fieldIDMongo"]: id})[0]
 	
-
+#функция отслеживания обновлений базы Mongo
 def observer_collection(collection, solr_url, solr_collection):
-	try:	
+	try:
+        #бесконечный цикл для постоянной проверки данных
 		while(True):
+            #контекст изменения базы
 			with collection.watch() as stream:
+                #цикл по изменениям в базе
 				for change in stream:
-					#print(change)
+                    #отправка данных на определение метода обработки
 					definition_methods(solr_url, solr_collection, change, collection)
+                    #логирование
 					logger = logging.getLogger("App.observer")
 					logger.info("get by mongo collection = " + collection.name + ", data = " + str(change))
+            #условие закрытия потока
 			if thread_break:
 				break
+    #логирование при возникновении исключения
 	except Exception as e:
 		logger = logging.getLogger("App.observer")
 		logger.error(e)
 
+#функция для определения типа запроса к Solr
 def definition_methods(solr_url, solr_collection, cursor, collection):
+    #если курсор на добавление, то добавляем документ
 	if cursor["operationType"] == "insert":
 		add_to_solr(solr_url, solr_collection, cursor["fullDocument"])
+    #если курсор на замену, то удаляем и добавляем обновленный документ
 	if cursor["operationType"] == "replace":
-		delete_to_solr(solr_url, solr_collection, cursor["documentKey"]["_id"])
+		delete_to_solr(solr_url, solr_collection, cursor["documentKey"][myConfig["fieldIDMongo"]])
 		add_to_solr(solr_url, solr_collection, cursor["fullDocument"])
+    #если курсор на обновление, то удаляем и добавляем обновленный документ
 	if cursor["operationType"] == "update":
-		delete_to_solr(solr_url, solr_collection, cursor["documentKey"]["_id"])
-		add_to_solr(solr_url, solr_collection, get_document_by_id(cursor["documentKey"]["_id"], collection))
+		delete_to_solr(solr_url, solr_collection, cursor["documentKey"][myConfig["fieldIDMongo"]])
+		add_to_solr(solr_url, solr_collection, get_document_by_id(cursor["documentKey"][myConfig["fieldIDMongo"]], collection))
+    #если курсор на удаление, то удаляем документ
 	if cursor["operationType"] == "delete":
 		print(cursor['documentKey'].keys())
-		delete_to_solr(solr_url, solr_collection, cursor["documentKey"]["_id"])
+		delete_to_solr(solr_url, solr_collection, cursor["documentKey"][myConfig["fieldIDMongo"]])
 
+#функция по отправке данных на Solr
 def render_request(data):
 	while True:
 		try:
+            #отправка данных на Solr
 			r = requests.post(data["URL"], data = data["data"], headers = data["headers"])
+            #определение, был ли завершён запрос или нет
 			if (r.status_code != 200):
+                #снова отправить запрос через 5 секунд
 				time.sleep(5)
 				continue
+            #логирование отправки данных
 			logger = logging.getLogger("App.render_request")
 			logger.info("send request " + r.url + ", content: " + r.content.decode("utf-8"))
 			return r
 		except ConnectionError:
 			pass
 
+#создание контекста демона
 context = daemon.DaemonContext(stdout=sys.stdout, stderr=sys.stderr, files_preserve = files)
+#запуск контекста
 with context:
 	main()
-
