@@ -9,9 +9,8 @@ db = client.olesya
 collection = db.users
 
 
-b = pd.read_json('mongo(1).json')
+b = pd.read_json('mongo (1).json')
 del b['_id']
-del b['id']
 def getDate(x):
 	return datetime.strptime(x,'%d/%m/%Y %H:%M:%S')
 b['creationDate'] = pd.to_datetime(b['creationDate'].apply(getDate))

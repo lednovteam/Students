@@ -8,6 +8,7 @@ import time
 import logging
 import logging.config
 import bson
+import pymongo.errors as mongoErrors
 from queue import Queue
 from threading import Thread
 from bson.json_util import dumps, loads
@@ -49,14 +50,14 @@ myConfig = {
     "mongoClientIP": "localhost:27002",
     "mongoClientReplicaSet": "My_Replica_Set",
     "solrURL": "http://192.168.0.82:8983/solr",
-    "solrCollection": 'sborniki',
-    "mongoClientDB": "sborniki",
+    "solrCollection": 'olesya2',
+    "mongoClientDB": "olesya",
     "mongoClientCollection": "users",
     "fieldLastModificationDateFromSolr": "creationDate._date",
     "fieldCommonIDMongoInSolr": "_id._oid",
     "fieldLastModificationDateFromMongo":"creationDate",
     "fieldIDMongo":"_id",
-    "force": False,
+    "force": True,
     }
 #инициализация логов
 logging.config.dictConfig(myConfig["logConfig"])
@@ -71,6 +72,7 @@ thread_break = False
 
 #основной поток демона
 def main():
+	logger = logging.getLogger("App.main")
     #тайм-аут для переподключение к Mongo
 	connect_to_mongo = 2
     #определение потока отправки данных на Solr
@@ -106,6 +108,56 @@ def main():
             #ожидание завершения потока
 			observer.join()
         #обработка исключений
+		except requests.exceptions.HTTPError as e:
+			logger.error(e)
+		except  requests.exceptions.ConnectionError as e:
+			logger.error(e)
+		except mongoErrors.AutoReconnect as e:
+			logger.error(e)
+		except mongoErrors.BulkWriteError as e:
+			logger.error(e)
+		except mongoErrors.CollectionInvalid as e:
+			logger.error(e)
+		except mongoErrors.ConfigurationError as e:
+			logger.error(e)
+		except mongoErrors.ConnectionFailure as e:
+			logger.error(e)
+		except mongoErrors.CursorNotFound as e:
+			logger.error(e)
+		except mongoErrors.DocumentTooLarge as e:
+			logger.error(e)
+		except mongoErrors.DuplicateKeyError as e:
+			logger.error(e)
+		except mongoErrors.EncryptionError as e:
+			logger.error(e)
+		except mongoErrors.ExceededMaxWaiters as e:
+			logger.error(e)
+		except mongoErrors.ExecutionTimeout as e:
+			logger.error(e)
+		except mongoErrors.InvalidName as e:
+			logger.error(e)
+		except mongoErrors.InvalidOperation as e:
+			logger.error(e)
+		except mongoErrors.InvalidURI as e:
+			logger.error(e)
+		except mongoErrors.NetworkTimeout as e:
+			logger.error(e)
+		except mongoErrors.NotMasterError as e:
+			logger.error(e)
+		except mongoErrors.OperationFailure as e:
+			logger.error(e)
+		except mongoErrors.ProtocolError as e:
+			logger.error(e)
+		except mongoErrors.PyMongoError as e:
+			logger.error(e)
+		except mongoErrors.ServerSelectionTimeoutError as e:
+			logger.error(e)
+		except mongoErrors.WTimeoutError as e:
+			logger.error(e)
+		except mongoErrors.WriteConcernError as e:
+			logger.error(e)
+		except mongoErrors.WriteError as e:
+			logger.error(e)
 		except Exception as e:
 			print(e)
 			thread_break = True
@@ -175,45 +227,50 @@ def force_update_baza(collection, solr_url, solr_collection):
 	URL = solr_url + '/' + solr_collection + '/update/json/docs?commit=true'
     #отправка запроса к Solr на получение количества всех документов
 	response = get_documents_by_query(solr_url, solr_collection, "q=*:*&rows=0")
-    #получение ID и даты каждой записи в Solr
-	responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*+%26%26+" + myConfig["fieldCommonIDMongoInSolr"] + ":*&fl=" + myConfig["fieldCommonIDMongoInSolr"] + "+" + myConfig["fieldLastModificationDateFromSolr"] + "&rows=" + str(response["response"]["numFound"]))
-    #получение ID и даты каждой записи в Mongo
-	responseForMongo = collection.find({}, {myConfig["fieldIDMongo"]:1, myConfig["fieldLastModificationDateFromMongo"]:1})
-    #создание словаря для ID и даты в Solr
-	dictSolr = {i.get(myConfig["fieldCommonIDMongoInSolr"])[0]:i.get(myConfig["fieldLastModificationDateFromSolr"])[0] for i in responseForDelete["response"]["docs"]}
-    #создание словаря для ID и даты в Mongo
-	dictMongo = {str(i.get(myConfig["fieldIDMongo"])):i.get(myConfig["fieldLastModificationDateFromMongo"]) for i in list(responseForMongo)}
-    #создание множества из ID Solr
-	solrSetIDs = set(dictSolr.keys())
-    #создание множества из ID Mongo
-	mongoSetIDs = set(dictMongo.keys())
-    #определения множества на удаление в Solr (есть в Solr, но нет в Mongo)
-	deleteSetForSolr = solrSetIDs.difference(mongoSetIDs)
-    #определения множества на добавление в Solr (есть в Mongo, но нет в Solr)
-	addSetForSolr = mongoSetIDs.difference(solrSetIDs)
-    #объединение множеств (данные, которые есть и там, и там)
-	intersectionSetForSolr = mongoSetIDs.intersection(solrSetIDs)
-	#сравнение элементов
-	for elem in intersectionSetForSolr:
-        #если дата не совпадает, то мы "обновляем" (т.е. удаляем и добавляем заново) запись
-		if (datetime.fromtimestamp(dictSolr[elem] / 1e3)-timedelta(hours = 5) != dictMongo[elem]):
-            #добавление элемента во множество на удаление
-			deleteSetForSolr.add(elem)
-            #добавление элемента во множество на добавление
-			addSetForSolr.add(elem)
-	print(addSetForSolr)
-	print(deleteSetForSolr)
-	#удаление элементов
-	for elem in deleteSetForSolr:
-        #удаление элемента по ID из Solr
-		render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+elem}})})
-	#получение элементов на добавление
-	addElements = list(collection.find({myConfig["fieldIDMongo"]:{"$in":[ bson.objectid.ObjectId(i) for i in addSetForSolr]}}))
-	print(addElements)
-	for elem2 in addElements:
-		print(elem2)
-		#добавление элементов по ID в Solr
-		render_request({"URL": URL, "headers": headers, "data": dumps(elem2)})
+	if (response["response"]["numFound"] > 0):
+    	#получение ID и даты каждой записи в Solr
+		responseForDelete = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*+%26%26+" + myConfig["fieldCommonIDMongoInSolr"] + ":*&fl=" + myConfig["fieldCommonIDMongoInSolr"] + "+" + myConfig["fieldLastModificationDateFromSolr"] + "&rows=" + str(response["response"]["numFound"]))
+    	#получение ID и даты каждой записи в Mongo
+		responseForMongo = collection.find({}, {myConfig["fieldIDMongo"]:1, myConfig["fieldLastModificationDateFromMongo"]:1})
+    	#создание словаря для ID и даты в Solr
+		dictSolr = {i.get(myConfig["fieldCommonIDMongoInSolr"])[0]:i.get(myConfig["fieldLastModificationDateFromSolr"])[0] for i in responseForDelete["response"]["docs"]}
+    	#создание словаря для ID и даты в Mongo
+		dictMongo = {str(i.get(myConfig["fieldIDMongo"])):i.get(myConfig["fieldLastModificationDateFromMongo"]) for i in list(responseForMongo)}
+    	#создание множества из ID Solr
+		solrSetIDs = set(dictSolr.keys())
+    	#создание множества из ID Mongo
+		mongoSetIDs = set(dictMongo.keys())
+    	#определения множества на удаление в Solr (есть в Solr, но нет в Mongo)
+		deleteSetForSolr = solrSetIDs.difference(mongoSetIDs)
+    	#определения множества на добавление в Solr (есть в Mongo, но нет в Solr)
+		addSetForSolr = mongoSetIDs.difference(solrSetIDs)
+    	#объединение множеств (данные, которые есть и там, и там)
+		intersectionSetForSolr = mongoSetIDs.intersection(solrSetIDs)
+		#сравнение элементов
+		for elem in intersectionSetForSolr:
+        	#если дата не совпадает, то мы "обновляем" (т.е. удаляем и добавляем заново) запись
+			if (datetime.fromtimestamp(dictSolr[elem] / 1e3)-timedelta(hours = 5) != dictMongo[elem]):
+            	#добавление элемента во множество на удаление
+				deleteSetForSolr.add(elem)
+            	#добавление элемента во множество на добавление
+				addSetForSolr.add(elem)
+		print(addSetForSolr)
+		print(deleteSetForSolr)
+		#удаление элементов
+		for elem in deleteSetForSolr:
+        	#удаление элемента по ID из Solr
+			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+elem}})})
+		#получение элементов на добавление
+		addElements = list(collection.find({myConfig["fieldIDMongo"]:{"$in":[ bson.objectid.ObjectId(i) for i in addSetForSolr]}}))
+		print(addElements)
+		for elem2 in addElements:
+			print(elem2)
+			#добавление элементов по ID в Solr
+			render_request({"URL": URL, "headers": headers, "data": dumps(elem2)})
+	else:
+		val = collection.find()
+		for v in val:
+			render_request({"URL": URL, "headers": headers, "data": dumps(v)})
 
 #получение документа по запросу 
 def get_documents_by_query(solr_url, solr_collection, query):
@@ -293,11 +350,11 @@ def definition_methods(solr_url, solr_collection, cursor, collection):
 
 #функция по отправке данных на Solr
 def render_request(data):
+	logger = logging.getLogger("App.render_request")
 	while True:
 		try:
             #отправка данных на Solr
 			r = requests.post(data["URL"], data = data["data"], headers = data["headers"])
-			logger = logging.getLogger("App.render_request")
             #определение, был ли завершён запрос или нет
 			if (r.status_code != 200):
                 #снова отправить запрос через 5 секунд
@@ -308,8 +365,9 @@ def render_request(data):
 			#logger = logging.getLogger("App.render_request")
 			logger.info("send request " + r.url + ", content: " + r.content.decode("utf-8"))
 			return r
-		except ConnectionError:
-			pass
+		except ConnectionError as e:
+			logger.error(e)
+			
 
 #создание контекста демона
 context = daemon.DaemonContext(stdout=sys.stdout, stderr=sys.stderr, files_preserve = files)
