@@ -159,7 +159,7 @@ def main():
 		except mongoErrors.WriteError as e:
 			logger.error(e)
 		except Exception as e:
-			print(e)
+			print("error", e)
 			logger.error(e)
 		finally:
 			thread_break = True
@@ -254,15 +254,12 @@ def force_update_baza(collection, solr_url, solr_collection):
 				deleteSetForSolr.add(elem)
             	#добавление элемента во множество на добавление
 				addSetForSolr.add(elem)
-		print(addSetForSolr)
-		print(deleteSetForSolr)
 		#удаление элементов
 		for elem in deleteSetForSolr:
         	#удаление элемента по ID из Solr
 			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+elem}})})
 		#получение элементов на добавление
 		addElements = list(collection.find({myConfig["fieldIDMongo"]:{"$in":[ bson.objectid.ObjectId(i) for i in addSetForSolr]}}))
-		print(addElements)
 		for elem2 in addElements:
 			print(elem2)
 			#добавление элементов по ID в Solr
