@@ -160,11 +160,11 @@ def main():
 			logger.error(e)
 		except Exception as e:
 			print(e)
+			logger.error(e)
+		finally:
 			thread_break = True
 			while (observer.isAlive()):
 				time.sleep(2)
-			logger = logging.getLogger("App.main")
-			logger.error(e)
 
 #функция стандартного обновления базы
 def update_baza(collection, solr_url, solr_collection):
