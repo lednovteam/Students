@@ -29,6 +29,17 @@ __secondaryQueue__ = Queue()
 #Булевая переменная для определения завершения обновления базы
 isSendOnlyPermissions=True
 
+
+def getFileNoInLoggers(logging,logger):
+	getLoggingFiles = logging.root.handlers
+	getLoggerFiles = logger.handlers
+	result=[]
+	for i in (getLoggingFiles+getLoggerFiles):
+		if(str(type(i))=="<class 'logging.FileHandler'>"):
+			result.append( i.stream.fileno())
+	return result
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config")
 argumentSys = parser.parse_args(sys.argv[1:])
@@ -46,17 +57,10 @@ files = getFileNoInLoggers(logging, logger)
 #булева переменная для остановки потока Observer'а
 thread_break = False
 
-def getFileNoInLoggers(logging,logger):
-	getLoggingFiles = logging.root.handlers
-	getLoggerFiles = logger.handlers
-	result=[]
-	for i in (getLoggingFiles+getLoggerFiles):
-		if(str(type(i))=="<class 'logging.FileHandler'>"):
-			result.append( i.stream.fileno())
-	return result
 
 #основной поток демона
 def main():
+	global isSendOnlyPermissions
 	logger = logging.getLogger("App.main")
     #тайм-аут для переподключение к Mongo
 	connect_to_mongo = 2
@@ -71,10 +75,10 @@ def main():
 			isSendOnlyPermissions = True
             #булева переменная для остановки потока
 			thread_break = False
-            logger.info("Connecting to mongodb: " + myConfig["mongoClientIP"] )
+			logger.info("Connecting to mongodb: " + myConfig["mongoClientIP"] )
             #определение подключения к Mongo
 			client = MongoClient(myConfig["mongoClientIP"], replicaset = myConfig["mongoClientReplicaSet"])
-            logger.info("Connected to mongodb: " + myConfig["mongoClientIP"])
+			logger.info("Connected to mongodb: " + myConfig["mongoClientIP"])
             #определение URL Solr
 			solr_url = myConfig["solrURL"]
             #определение коллекции Solr
@@ -94,6 +98,7 @@ def main():
 			else:
                 #запуск стандартного обновления базы
 				update_database(collection, solr_url, solr_collection)
+			print("Завершил загрузку базы")
 			#Все преоритетные запросы были переданы в очередь с приоритетом 
 			isSendOnlyPermissions=False
             #ожидание завершения потока
@@ -158,10 +163,11 @@ def main():
 				time.sleep(2)
 			#Даём переменной загрузки из бд приоритет, чтобы можно было очистить очередь
 			isSendOnlyPermissions = True
+			print("finally")
 			#Очищаем очередь от недогруженных данных, потому что, потом проще загрузить из бд
 			#Так как, запросы к бд нельзя делать до того, как загрузятся данные из очереди
 			#Так как могут появиться ошибки вида конкурирующего потока или двойного добавления 
-			while(not __secondaryQueue__.empty):
+			while(not __secondaryQueue__.empty()):
 				___secondaryQueue__.get()
 			
 
@@ -278,12 +284,14 @@ def queue_into_request():
 	while True:
         #получение первой записи из очереди
 		if(not __priorityQueue__.empty()):
+			print("Pririty")
 			data = __priorityQueue__.get()
 			#отправка запроса
 			render_request(data)
 			#Если это был последний запрос из курсора, значит можно разрешить запросы для синхронизации баз
 			
 		elif(not isSendOnlyPermissions and not __secondaryQueue__.empty()):
+			print("Secondary")
 			data = __secondaryQueue__.get()
 			#отправка запроса
 			render_request(data)

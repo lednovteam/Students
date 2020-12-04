@@ -1412,3 +1412,186 @@
 2020-12-03 00:50:08,567 - App - INFO - start program
 2020-12-03 00:53:13,166 - App - INFO - start program
 2020-12-03 00:55:42,965 - App - INFO - start program
+2020-12-04 13:22:25,971 - App - INFO - start program
+2020-12-04 13:24:47,178 - App - INFO - start program
+2020-12-04 13:24:47,212 - App.main - INFO - Connecting to mongodb: localhost:27002
+2020-12-04 13:24:47,256 - App.main - INFO - Connected to mongodb: localhost:27002
+2020-12-04 13:35:23,627 - App - INFO - start program
+2020-12-04 13:35:23,661 - App.main - INFO - Connecting to mongodb: localhost:27002
+2020-12-04 13:35:23,715 - App.main - INFO - Connected to mongodb: localhost:27002
+2020-12-04 13:35:33,534 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":9707}}
+
+2020-12-04 13:35:34,392 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":855}}
+
+2020-12-04 13:35:34,660 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":175}}
+
+2020-12-04 13:35:34,872 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":203}}
+
+2020-12-04 13:35:35,250 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":373}}
+
+2020-12-04 13:35:35,349 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":89}}
+
+2020-12-04 13:35:35,455 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":93}}
+
+2020-12-04 13:35:35,522 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":59}}
+
+2020-12-04 13:35:35,766 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":238}}
+
+2020-12-04 13:35:35,825 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":45}}
+
+2020-12-04 13:35:36,419 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":580}}
+
+2020-12-04 13:35:36,460 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":32}}
+
+2020-12-04 13:35:36,495 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":26}}
+
+2020-12-04 13:35:37,050 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":551}}
+
+2020-12-04 13:35:37,159 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":101}}
+
+2020-12-04 13:35:38,258 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":1103}}
+
+2020-12-04 13:35:38,332 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":66}}
+
+2020-12-04 13:35:38,372 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":30}}
+
+2020-12-04 13:35:38,710 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":301}}
+
+2020-12-04 13:35:38,827 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":108}}
+
+2020-12-04 13:35:38,872 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":35}}
+
+2020-12-04 13:35:39,021 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":141}}
+
+2020-12-04 13:35:39,118 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":83}}
+
+2020-12-04 13:35:39,243 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":115}}
+
+2020-12-04 13:35:39,371 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya2/update?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":116}}
+
+2020-12-04 13:39:05,673 - App - INFO - start program
+2020-12-04 13:39:05,706 - App.main - INFO - Connecting to mongodb: localhost:27002
+2020-12-04 13:39:05,750 - App.main - INFO - Connected to mongodb: localhost:27002
+2020-12-04 13:39:38,098 - App.observer - INFO - get by mongo collection = users, data = {'_id': {'_data': '825FC9F5C9000000012B022C0100296E5A100445635CBE2B504907AB1D0D3244812E5C46645F696400645FC9F5C97AE9E733048229230004'}, 'operationType': 'insert', 'clusterTime': Timestamp(1607071177, 1), 'fullDocument': {'_id': ObjectId('5fc9f5c97ae9e73304822923'), 'nick': 'AAAAAAAAAAa', 'status': 'MMMMMMMMMMMM', 'date': datetime.datetime(2020, 12, 4, 8, 39, 37, 758000)}, 'ns': {'db': 'olesya', 'coll': 'users'}, 'documentKey': {'_id': ObjectId('5fc9f5c97ae9e73304822923')}}
+2020-12-04 13:54:52,865 - App - INFO - start program
+2020-12-04 13:54:52,895 - App.main - INFO - Connecting to mongodb: localhost:27002
+2020-12-04 13:54:52,941 - App.main - INFO - Connected to mongodb: localhost:27002
+2020-12-04 13:54:58,514 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya/update/json/docs?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":5474}}
+
+2020-12-04 13:55:23,888 - App.observer - INFO - get by mongo collection = users, data = {'_id': {'_data': '825FC9F97B000000022B022C0100296E5A100445635CBE2B504907AB1D0D3244812E5C46645F696400645FC9F97B8FFB8349E84D8ADB0004'}, 'operationType': 'insert', 'clusterTime': Timestamp(1607072123, 2), 'fullDocument': {'_id': ObjectId('5fc9f97b8ffb8349e84d8adb'), 'nick': 'Ino', 'status': 'NARUTOOO', 'date': datetime.datetime(2020, 12, 4, 8, 55, 23, 807000)}, 'ns': {'db': 'olesya', 'coll': 'users'}, 'documentKey': {'_id': ObjectId('5fc9f97b8ffb8349e84d8adb')}}
+2020-12-04 14:01:31,727 - App - INFO - start program
+2020-12-04 14:01:31,756 - App.main - INFO - Connecting to mongodb: localhost:27002
+2020-12-04 14:01:31,804 - App.main - INFO - Connected to mongodb: localhost:27002
+2020-12-04 14:01:32,336 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya/update/json/docs?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":395}}
+
+2020-12-04 14:01:32,536 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya/update/json/docs?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":193}}
+
+2020-12-04 14:02:07,839 - App.observer - INFO - get by mongo collection = users, data = {'_id': {'_data': '825FC9FB0F000000012B022C0100296E5A100445635CBE2B504907AB1D0D3244812E5C46645F696400645FC9FB0F07DA2004541BBF560004'}, 'operationType': 'insert', 'clusterTime': Timestamp(1607072527, 1), 'fullDocument': {'_id': ObjectId('5fc9fb0f07da2004541bbf56'), 'nick': 'VVVVVVVVVVV', 'status': 'EEEEEEE', 'date': datetime.datetime(2020, 12, 4, 9, 2, 7, 769000)}, 'ns': {'db': 'olesya', 'coll': 'users'}, 'documentKey': {'_id': ObjectId('5fc9fb0f07da2004541bbf56')}}
+2020-12-04 14:08:06,042 - App - INFO - start program
+2020-12-04 14:08:06,074 - App.main - INFO - Connecting to mongodb: localhost:27002
+2020-12-04 14:08:06,110 - App.main - INFO - Connected to mongodb: localhost:27002
+2020-12-04 14:08:06,973 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya/update/json/docs?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":729}}
+
+2020-12-04 14:08:08,215 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya/update/json/docs?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":1244}}
+
+2020-12-04 14:08:08,945 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya/update/json/docs?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":727}}
+
+2020-12-04 14:08:38,816 - App.observer - INFO - get by mongo collection = users, data = {'_id': {'_data': '825FC9FC96000000012B022C0100296E5A100445635CBE2B504907AB1D0D3244812E5C46645F696400645FC9FC969A56F2AE1A4E9F550004'}, 'operationType': 'insert', 'clusterTime': Timestamp(1607072918, 1), 'fullDocument': {'_id': ObjectId('5fc9fc969a56f2ae1a4e9f55'), 'nick': 'GGGGGG', 'status': 'WWWWWWWWWWWW', 'date': datetime.datetime(2020, 12, 4, 9, 8, 38, 689000)}, 'ns': {'db': 'olesya', 'coll': 'users'}, 'documentKey': {'_id': ObjectId('5fc9fc969a56f2ae1a4e9f55')}}
+2020-12-04 14:08:39,053 - App.render_request - INFO - send request http://192.168.0.82:8983/solr/olesya/update/json/docs?commit=true, content: {
+  "responseHeader":{
+    "status":0,
+    "QTime":213}}
+
