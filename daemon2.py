@@ -8,57 +8,33 @@ import time
 import logging
 import logging.config
 import bson
+import json
+import argparse
 import pymongo.errors as mongoErrors
 from queue import Queue
 from threading import Thread
 from bson.json_util import dumps, loads
+#==================================================================================
+#Необходимо добавить обработку запросов к базе, для получения данных, т.к. солр может 
+#быть выключен, и тогда не получится отправить запросы для получения данных на бд 
+#Следовательно необходимо создать исключительную ситуацию в get_documents_by_query
+#
+#==================================================================================
 
 #определение очереди для изменения значений в Solr
-__queue__ = Queue()
-dictLogConfig = {
-        "version":1,
-        "handlers":{
-            "fileHandler":{
-                "class":"logging.FileHandler",
-                "formatter":"myFormatter",
-                "filename":"daemon.log"
-            },
-	"rootHandler":{
-		"class":"logging.FileHandler",
-		"filename":"daemon_root.log"
-	}
-        },
-        "loggers":{
-            "App":{
-                "handlers":["fileHandler"],
-                "level":"DEBUG",
-            }
-        },
-        "formatters":{
-            "myFormatter":{
-                "format":"%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            }
-        },
-    "root":{
-		"level": "DEBUG",
-		"handlers": ["rootHandler"]
-	}
-    }
+#Приоритетная очередь для загрузок из базы и других запросов
+__priorityQueue__ = Queue()
+#Второстепенная очередь 
+__secondaryQueue__ = Queue()
+#Булевая переменная для определения завершения обновления базы
+isSendOnlyPermissions=True
 
-myConfig = {
-    "logConfig": dictLogConfig,
-    "mongoClientIP": "localhost:27002",
-    "mongoClientReplicaSet": "My_Replica_Set",
-    "solrURL": "http://192.168.0.82:8983/solr",
-    "solrCollection": 'olesya2',
-    "mongoClientDB": "olesya",
-    "mongoClientCollection": "users",
-    "fieldLastModificationDateFromSolr": "creationDate._date",
-    "fieldCommonIDMongoInSolr": "_id._oid",
-    "fieldLastModificationDateFromMongo":"creationDate",
-    "fieldIDMongo":"_id",
-    "force": True,
-    }
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--config")
+argumentSys = parser.parse_args(sys.argv[1:])
+fileConfig = open(argumentSys.config, "r")
+myConfig = json.loads(fileConfig.read())
+fileConfig.close()
 #инициализация логов
 logging.config.dictConfig(myConfig["logConfig"])
 #определение корневого элемента
@@ -66,9 +42,18 @@ logger = logging.getLogger("App")
 #логирование запуска скрипта
 logger.info("start program")
 #определение файлов, которые не должны закрываться после запуска демона
-files = [logger.handlers[0].stream.fileno(), logging.root.handlers[0].stream.fileno()]
-#булева переменная для остановки потока
+files = getFileNoInLoggers(logging, logger)
+#булева переменная для остановки потока Observer'а
 thread_break = False
+
+def getFileNoInLoggers(logging,logger):
+	getLoggingFiles = logging.root.handlers
+	getLoggerFiles = logger.handlers
+	result=[]
+	for i in (getLoggingFiles+getLoggerFiles):
+		if(str(type(i))=="<class 'logging.FileHandler'>"):
+			result.append( i.stream.fileno())
+	return result
 
 #основной поток демона
 def main():
@@ -82,10 +67,14 @@ def main():
     #основной цикл программы для подключения
 	while (True):
 		try:
+			#Даём переменной загрузки из бд приоритет
+			isSendOnlyPermissions = True
             #булева переменная для остановки потока
 			thread_break = False
+            logger.info("Connecting to mongodb: " + myConfig["mongoClientIP"] )
             #определение подключения к Mongo
 			client = MongoClient(myConfig["mongoClientIP"], replicaset = myConfig["mongoClientReplicaSet"])
+            logger.info("Connected to mongodb: " + myConfig["mongoClientIP"])
             #определение URL Solr
 			solr_url = myConfig["solrURL"]
             #определение коллекции Solr
@@ -101,10 +90,12 @@ def main():
             #определение способа обновления базы с помощью цикла
 			if myConfig["force"]:
                 #запуск жесткого обновления базы
-				force_update_baza(collection, solr_url, solr_collection)
+				force_update_database(collection, solr_url, solr_collection)
 			else:
                 #запуск стандартного обновления базы
-				update_baza(collection, solr_url, solr_collection)
+				update_database(collection, solr_url, solr_collection)
+			#Все преоритетные запросы были переданы в очередь с приоритетом 
+			isSendOnlyPermissions=False
             #ожидание завершения потока
 			observer.join()
         #обработка исключений
@@ -165,14 +156,22 @@ def main():
 			thread_break = True
 			while (observer.isAlive()):
 				time.sleep(2)
+			#Даём переменной загрузки из бд приоритет, чтобы можно было очистить очередь
+			isSendOnlyPermissions = True
+			#Очищаем очередь от недогруженных данных, потому что, потом проще загрузить из бд
+			#Так как, запросы к бд нельзя делать до того, как загрузятся данные из очереди
+			#Так как могут появиться ошибки вида конкурирующего потока или двойного добавления 
+			while(not __secondaryQueue__.empty):
+				___secondaryQueue__.get()
+			
 
 #функция стандартного обновления базы
-def update_baza(collection, solr_url, solr_collection):
+def update_database(collection, solr_url, solr_collection):
     #определение заголовка запроса Solr
 	headers = {'Content-type': "application/json"}
     #строка запроса Solr
 	URL = solr_url + '/' + solr_collection + '/update/json/docs?commit=true'
-	firstResponse = get_documents_by_query(solr_url, solr_collection, "q=*:*")
+	firstResponse = get_documents_by_query(solr_url, solr_collection, "q=*:*&rows=0")
 	if (firstResponse["response"]["numFound"] > 0): 
     	#отправка запроса к Solr на получение последнего обновленного документа
 		response = get_documents_by_query(solr_url, solr_collection, "q=" + myConfig["fieldLastModificationDateFromSolr"] + ":*&rows=1&sort=" + myConfig["fieldLastModificationDateFromSolr"] + "+desc")
@@ -187,7 +186,7 @@ def update_baza(collection, solr_url, solr_collection):
     	#цикл по всем элементам, которые находятся в Solr, но не находятся в Mongo
 		for resDel in solrSetDelete.difference(mongoSetDelete):
         	#удаление элементов из Solr
-			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+ resDel}})})
+			__priorityQueue__.put({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+ resDel}})})
     	#булева переменная для определения обновления данных (данных нет)
 		isDelete = False
     	#условие для определения ошибки в ответе сервера
@@ -211,16 +210,16 @@ def update_baza(collection, solr_url, solr_collection):
         	#если данные уже были в таблице, то записи удаляются (исключаем ошибку при отстутсвии данных)
 			if isDelete:
             	#удаление возможной записи с IDMongo
-				render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"" + myConfig["fieldCommonIDMongoInSolr"] + ":"+str(coll[myConfig["fieldIDMongo"]])}})})
+				__priorityQueue__.put({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"" + myConfig["fieldCommonIDMongoInSolr"] + ":"+str(coll[myConfig["fieldIDMongo"]])}})})
         	#добавление элемента
-			render_request({"URL": URL,"headers": headers, "data": dumps(coll)})
+			__priorityQueue__.put({"URL": URL,"headers": headers, "data": dumps(coll)})
 	else:
 		val = collection.find()
 		for v in val:
-			render_request({"URL": URL,"headers": headers, "data": dumps(v)})
+			__priorityQueue__.put({"URL": URL,"headers": headers, "data": dumps(v)})
 
 #функция жесткого обновления базы
-def force_update_baza(collection, solr_url, solr_collection):
+def force_update_database(collection, solr_url, solr_collection):
     #определение заголовка запроса Solr
 	headers = {'Content-type': "application/json"}
     #строка запроса Solr
@@ -257,17 +256,17 @@ def force_update_baza(collection, solr_url, solr_collection):
 		#удаление элементов
 		for elem in deleteSetForSolr:
         	#удаление элемента по ID из Solr
-			render_request({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+elem}})})
+			__priorityQueue__.put({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+elem}})})
 		#получение элементов на добавление
 		addElements = list(collection.find({myConfig["fieldIDMongo"]:{"$in":[ bson.objectid.ObjectId(i) for i in addSetForSolr]}}))
 		for elem2 in addElements:
 			print(elem2)
 			#добавление элементов по ID в Solr
-			render_request({"URL": URL, "headers": headers, "data": dumps(elem2)})
+			__priorityQueue__.put({"URL": URL, "headers": headers, "data": dumps(elem2)})
 	else:
 		val = collection.find()
 		for v in val:
-			render_request({"URL": URL, "headers": headers, "data": dumps(v)})
+			__priorityQueue__.put({"URL": URL, "headers": headers, "data": dumps(v)})
 
 #получение документа по запросу 
 def get_documents_by_query(solr_url, solr_collection, query):
@@ -278,9 +277,16 @@ def queue_into_request():
     #бесконечный цикл работы потока
 	while True:
         #получение первой записи из очереди
-		data = __queue__.get()
-        #отправка запроса
-		render_request(data)
+		if(not __priorityQueue__.empty()):
+			data = __priorityQueue__.get()
+			#отправка запроса
+			render_request(data)
+			#Если это был последний запрос из курсора, значит можно разрешить запросы для синхронизации баз
+			
+		elif(not isSendOnlyPermissions and not __secondaryQueue__.empty()):
+			data = __secondaryQueue__.get()
+			#отправка запроса
+			render_request(data)
 
 #функция добавления записи в Solr
 def add_to_solr(solr_url, solr_collection, data):
@@ -289,7 +295,7 @@ def add_to_solr(solr_url, solr_collection, data):
     #заголовок запроса
 	headers = {'Content-type': "application/json"}
     #добавление записи в очередь
-	__queue__.put({"URL": solr_url + '/' + solr_collection + path, "headers":headers, "data":dumps(data)})
+	__secondaryQueue__.put({"URL": solr_url + '/' + solr_collection + path, "headers":headers, "data":dumps(data)})
 
 #функция удаления записи из Solr
 def delete_to_solr(solr_url, solr_collection, data):
@@ -298,7 +304,7 @@ def delete_to_solr(solr_url, solr_collection, data):
     #заголовок запроса
 	headers = {'Content-type': "application/json"}
     #добавление записи в очередь на удаление
-	__queue__.put({"URL": solr_url + '/' + solr_collection + path, "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+str(data)}})})
+	__secondaryQueue__.put({"URL": solr_url + '/' + solr_collection + path, "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+str(data)}})})
 
 #функция получения документов из Mongo по ID
 def get_document_by_id(id, collection):
@@ -355,7 +361,7 @@ def render_request(data):
             #определение, был ли завершён запрос или нет
 			if (r.status_code != 200):
                 #снова отправить запрос через 5 секунд
-				logger.info("не удалось отправить запрос :( " + r.url + " content: " + r.content.decode("utf-8"))
+				logger.info("failed to send request :( " + r.url + " content: " + r.content.decode("utf-8"))
 				time.sleep(5)
 				continue
             #логирование отправки данных
