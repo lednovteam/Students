@@ -193,30 +193,16 @@ def update_database(collection, solr_url, solr_collection):
 		for resDel in solrSetDelete.difference(mongoSetDelete):
         	#удаление элементов из Solr
 			__priorityQueue__.put({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query": myConfig["fieldCommonIDMongoInSolr"] + ":"+ resDel}})})
-    	#булева переменная для определения обновления данных (данных нет)
-		isDelete = False
-    	#условие для определения ошибки в ответе сервера
-		if "error" in response:
-        	#если данных в ядре Solr нет, то данные добавляются
-			if response["error"]["code"] == 400:
-				print("kek")
-            	#получение всех записей
-				a = collection.find()
-		else:
-        	#булева переменная для определения обновления данных (данные есть)
-			isDelete = True
         	#получение даты последней обновленной записи (в Solr)
-			date = response["response"]["docs"][0][myConfig["fieldLastModificationDateFromSolr"]][0]
+		date = response["response"]["docs"][0][myConfig["fieldLastModificationDateFromSolr"]][0]
         	#поиск записи в Mongo c датой обновления более поздней, чем дата обновления последней записи в Solr
-			a= collection.find({myConfig["fieldLastModificationDateFromMongo"]: {"$gt": datetime.fromtimestamp(date / 1e3)-timedelta(hours = 5)} })
-			print(datetime.fromtimestamp(date / 1e3))
+		a= collection.find({myConfig["fieldLastModificationDateFromMongo"]: {"$gt": datetime.fromtimestamp(date / 1e3)-timedelta(hours = 5)} })
+		print(datetime.fromtimestamp(date / 1e3))
     	#цикл на добавление записей
 		for coll in a:
 			print(coll)
-        	#если данные уже были в таблице, то записи удаляются (исключаем ошибку при отстутсвии данных)
-			if isDelete:
             	#удаление возможной записи с IDMongo
-				__priorityQueue__.put({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"" + myConfig["fieldCommonIDMongoInSolr"] + ":"+str(coll[myConfig["fieldIDMongo"]])}})})
+			__priorityQueue__.put({"URL": solr_url + '/' + solr_collection + '/update?commit=true', "headers":headers, "data":dumps({"delete":{"query":"" + myConfig["fieldCommonIDMongoInSolr"] + ":"+str(coll[myConfig["fieldIDMongo"]])}})})
         	#добавление элемента
 			__priorityQueue__.put({"URL": URL,"headers": headers, "data": dumps(coll)})
 	else:
@@ -284,12 +270,10 @@ def queue_into_request():
 	while True:
         #получение первой записи из очереди
 		if(not __priorityQueue__.empty()):
-			print("Pririty")
 			data = __priorityQueue__.get()
 			#отправка запроса
 			render_request(data)
-			#Если это был последний запрос из курсора, значит можно разрешить запросы для синхронизации баз
-			
+			#Если это был последний запрос из курсора, значит можно разрешить запросы для синхронизации баз	
 		elif(not isSendOnlyPermissions and not __secondaryQueue__.empty()):
 			print("Secondary")
 			data = __secondaryQueue__.get()
